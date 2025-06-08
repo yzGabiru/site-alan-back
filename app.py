@@ -7,7 +7,7 @@ from functools import wraps
 app = Flask(__name__)
 
 # Substitua com sua string de conexão
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://zgabiru:123456@localhost:5432/atividade_alan'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres.ysrtgtczvjowdjvbakii:shineray3214@aws-0-sa-east-1.pooler.supabase.com:6543/postgres'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.secret_key = '2f2be5642b7f927769811a0efbca650d'  # Troque por uma chave forte em produção
 
