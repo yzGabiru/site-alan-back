@@ -3,11 +3,12 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
+import os
 
 app = Flask(__name__)
 
 # Substitua com sua string de conexão
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres.ysrtgtczvjowdjvbakii:shineray3214@aws-0-sa-east-1.pooler.supabase.com:6543/postgres'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.secret_key = '2f2be5642b7f927769811a0efbca650d'  # Troque por uma chave forte em produção
 
@@ -89,3 +90,4 @@ def logout():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
