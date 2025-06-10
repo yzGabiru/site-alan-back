@@ -20,7 +20,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # 2) JWT SECRET: pode sobrescrever com ENV JWT_SECRET_KEY
 app.config['JWT_SECRET_KEY'] = os.getenv(
     'JWT_SECRET_KEY',
-    'pKo7vYzZAK8Vb_gjwRWknT1cF-34UpQX'  # chave aleatória de exemplo
+    'pKo7vYzZAK8Vb_gjwRWknT1cF-34UpQX'
 )
 
 db = SQLAlchemy(app)
@@ -39,19 +39,6 @@ class Premio(db.Model):
     id    = db.Column(db.Integer, primary_key=True)
     nome  = db.Column(db.String(80), nullable=False)
     custo = db.Column(db.Integer, nullable=False)
-
-# cria tabelas e popula prêmios na primeira requisição
-@app.before_first_request
-def init_db():
-    db.create_all()
-    if Premio.query.count() == 0:
-        semente = [
-            Premio(nome='Cesta Básica',    custo=80),
-            Premio(nome='Desconto R\$10',  custo=50),
-            Premio(nome='Produto Grátis',  custo=120),
-        ]
-        db.session.add_all(semente)
-        db.session.commit()
 
 # Rotas
 @app.route('/')
