@@ -1,10 +1,12 @@
 from app import app, db, Premio
 
 with app.app_context():
-    # cria todas as tabelas que não existirem
+    # DESTRÓI todas as tabelas
+    db.drop_all()
+    # CRIA novamente as tabelas já com o campo pontos
     db.create_all()
 
-    # popula os prêmios apenas se ainda não tiver nenhum
+    # Popula prêmios iniciais (se quiser)
     if Premio.query.count() == 0:
         prêmios = [
             Premio(nome='Cesta Básica',   custo=80),
@@ -14,7 +16,5 @@ with app.app_context():
         db.session.add_all(prêmios)
         db.session.commit()
         print("Prêmios iniciais inseridos.")
-    else:
-        print("Prêmios já existem no banco.")
 
     print("Tabelas criadas com sucesso.")
