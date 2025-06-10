@@ -1,93 +1,91 @@
-from flask import Flask, jsonify, request, session
+import os
+from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
-from functools import wraps
-import os
+from flask_jwt_extended import (
+    JWTManager, create_access_token,
+    jwt_required, get_jwt_identity
+)
 
 app = Flask(__name__)
-
-# Substitua com sua string de conexão
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///db.sqlite3')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.secret_key = '2f2be5642b7f927769811a0efbca650d'  # Troque por uma chave forte em produção
-
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'troque_isto')
 db = SQLAlchemy(app)
-CORS(app, supports_credentials=True)
+CORS(app)
 
-# Modelo de usuário
 class Usuario(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(80), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     senha = db.Column(db.String(300), nullable=False)
+    pontos = db.Column(db.Integer, default=0)
 
-# Middleware de autenticação
-def login_requerido(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'usuario_id' not in session:
-            return jsonify({'error': 'Acesso não autorizado. Faça login primeiro.'}), 401
-        return f(*args, **kwargs)
-    return decorated_function
+class Premio(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(80), nullable=False)
+    custo = db.Column(db.Integer, nullable=False)
 
-# Rota inicial
+jwt = JWTManager(app)
+
 @app.route('/')
 def index():
     return "API Funcionando!"
 
-# Listar usuários (requer login)
-@app.route('/usuarios')
-@login_requerido
-def listar_usuarios():
-    usuarios = Usuario.query.all()
-    return jsonify([
-        {'id': u.id, 'nome': u.nome, 'email': u.email}
-        for u in usuarios
-    ])
-
-# Registrar novo usuário
 @app.route('/registrar', methods=['POST'])
-def registrar_usuario():
+def registrar():
     dados = request.get_json()
-    nome = dados.get('nome')
-    email = dados.get('email')
-    senha = dados.get('senha')
-
-    if not nome or not email or not senha:
-        return jsonify({'error': 'Dados incompletos'}), 400
-
-    if Usuario.query.filter_by(email=email).first():
-        return jsonify({'erro': 'Email já cadastrado'}), 400
-
-    senha_hash = generate_password_hash(senha)
-    novo_usuario = Usuario(nome=nome, email=email, senha=senha_hash)
-    db.session.add(novo_usuario)
+    if not all(k in dados for k in ('nome','email','senha')):
+        return jsonify({'erro':'Dados incompletos'}), 400
+    if Usuario.query.filter_by(email=dados['email']).first():
+        return jsonify({'erro':'Email já cadastrado'}), 400
+    usr = Usuario(
+        nome=dados['nome'],
+        email=dados['email'],
+        senha=generate_password_hash(dados['senha']),
+        pontos=100  # pontos iniciais (exemplo)
+    )
+    db.session.add(usr)
     db.session.commit()
+    return jsonify({'message':'Registrado com sucesso!'}),201
 
-    return jsonify({'message': 'Usuário registrado com sucesso!'}), 201
-
-# Login
 @app.route('/login', methods=['POST'])
-def login_usuario():
+def login():
     dados = request.get_json()
-    email = dados.get('email')
-    senha = dados.get('senha')
+    usr = Usuario.query.filter_by(email=dados.get('email')).first()
+    if not usr or not check_password_hash(usr.senha, dados.get('senha','')):
+        return jsonify({'erro':'Credenciais inválidas'}),401
+    token = create_access_token(identity=usr.id)
+    return jsonify({'access_token':token}),200
 
-    usuario = Usuario.query.filter_by(email=email).first()
+@app.route('/usuario/pontos', methods=['GET'])
+@jwt_required()
+def meus_pontos():
+    uid = get_jwt_identity()
+    usr = Usuario.query.get(uid)
+    return jsonify({'pontos': usr.pontos})
 
-    if not usuario or not check_password_hash(usuario.senha, senha):
-        return jsonify({'error': 'Credenciais inválidas'}), 401
+@app.route('/premios', methods=['GET'])
+@jwt_required()
+def listar_premios():
+    lst = Premio.query.all()
+    return jsonify([{'id':p.id,'nome':p.nome,'custo':p.custo} for p in lst])
 
-    session['usuario_id'] = usuario.id
-    return jsonify({'message': 'Login realizado com sucesso!'})
+@app.route('/resgatar', methods=['POST'])
+@jwt_required()
+def resgatar():
+    uid = get_jwt_identity()
+    dados = request.get_json()
+    premio = Premio.query.get(dados.get('premio_id'))
+    usr = Usuario.query.get(uid)
+    if not premio:
+        return jsonify({'erro':'Prêmio não existe'}),404
+    if usr.pontos < premio.custo:
+        return jsonify({'erro':'Pontos insuficientes'}),400
+    usr.pontos -= premio.custo
+    db.session.commit()
+    return jsonify({'message':'Resgate efetuado','pontos_restantes':usr.pontos})
 
-# Logout
-@app.route('/logout', methods=['POST'])
-def logout():
-    session.pop('usuario_id', None)
-    return jsonify({'message': 'Logout realizado com sucesso!'})
-
-if __name__ == '__main__':
+if __name__=='__main__':
     app.run(debug=True)
-
