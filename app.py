@@ -9,11 +9,11 @@ from flask_jwt_extended import (
 )
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///db.sqlite3')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'troque_isto')
+app.secret_key = '2f2be5642b7f927769811a0efbca650d' 
 db = SQLAlchemy(app)
-CORS(app)
+CORS(app, supports_credentials=True)
 
 class Usuario(db.Model):
     id = db.Column(db.Integer, primary_key=True)
