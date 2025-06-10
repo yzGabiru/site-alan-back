@@ -9,52 +9,77 @@ from flask_jwt_extended import (
 )
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.secret_key = '2f2be5642b7f927769811a0efbca650d' 
-db = SQLAlchemy(app)
-CORS(app, supports_credentials=True)
 
+# 1) DATABASE: usa o ENV DATABASE_URL ou cai na sua string Postgres
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
+    'DATABASE_URL',
+    'postgresql://postgres.ysrtgtczvjowdjvbakii:shineray3214@aws-0-sa-east-1.pooler.supabase.com:6543/postgres'
+)
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# 2) JWT SECRET: pode sobrescrever com ENV JWT_SECRET_KEY
+app.config['JWT_SECRET_KEY'] = os.getenv(
+    'JWT_SECRET_KEY',
+    'pKo7vYzZAK8Vb_gjwRWknT1cF-34UpQX'  # chave aleatória de exemplo
+)
+
+db = SQLAlchemy(app)
+CORS(app)
+jwt = JWTManager(app)
+
+# Modelos
 class Usuario(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    nome = db.Column(db.String(80), nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    senha = db.Column(db.String(300), nullable=False)
+    id     = db.Column(db.Integer, primary_key=True)
+    nome   = db.Column(db.String(80), nullable=False)
+    email  = db.Column(db.String(120), unique=True, nullable=False)
+    senha  = db.Column(db.String(300), nullable=False)
     pontos = db.Column(db.Integer, default=0)
 
 class Premio(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    nome = db.Column(db.String(80), nullable=False)
+    id    = db.Column(db.Integer, primary_key=True)
+    nome  = db.Column(db.String(80), nullable=False)
     custo = db.Column(db.Integer, nullable=False)
 
-jwt = JWTManager(app)
+# cria tabelas e popula prêmios na primeira requisição
+@app.before_first_request
+def init_db():
+    db.create_all()
+    if Premio.query.count() == 0:
+        semente = [
+            Premio(nome='Cesta Básica',    custo=80),
+            Premio(nome='Desconto R\$10',  custo=50),
+            Premio(nome='Produto Grátis',  custo=120),
+        ]
+        db.session.add_all(semente)
+        db.session.commit()
 
+# Rotas
 @app.route('/')
 def index():
     return "API Funcionando!"
 
 @app.route('/registrar', methods=['POST'])
 def registrar():
-    dados = request.get_json()
-    if not all(k in dados for k in ('nome','email','senha')):
-        return jsonify({'erro':'Dados incompletos'}), 400
-    if Usuario.query.filter_by(email=dados['email']).first():
-        return jsonify({'erro':'Email já cadastrado'}), 400
-    usr = Usuario(
-        nome=dados['nome'],
-        email=dados['email'],
-        senha=generate_password_hash(dados['senha']),
-        pontos=100  # pontos iniciais (exemplo)
+    d = request.get_json()
+    if not all(k in d for k in ('nome','email','senha')):
+        return jsonify({'erro':'Dados incompletos'}),400
+    if Usuario.query.filter_by(email=d['email']).first():
+        return jsonify({'erro':'Email já cadastrado'}),400
+    u = Usuario(
+        nome   = d['nome'],
+        email  = d['email'],
+        senha  = generate_password_hash(d['senha']),
+        pontos = 100
     )
-    db.session.add(usr)
+    db.session.add(u)
     db.session.commit()
     return jsonify({'message':'Registrado com sucesso!'}),201
 
 @app.route('/login', methods=['POST'])
 def login():
-    dados = request.get_json()
-    usr = Usuario.query.filter_by(email=dados.get('email')).first()
-    if not usr or not check_password_hash(usr.senha, dados.get('senha','')):
+    d   = request.get_json()
+    usr = Usuario.query.filter_by(email=d.get('email')).first()
+    if not usr or not check_password_hash(usr.senha, d.get('senha','')):
         return jsonify({'erro':'Credenciais inválidas'}),401
     token = create_access_token(identity=usr.id)
     return jsonify({'access_token':token}),200
@@ -64,28 +89,31 @@ def login():
 def meus_pontos():
     uid = get_jwt_identity()
     usr = Usuario.query.get(uid)
-    return jsonify({'pontos': usr.pontos})
+    return jsonify({'pontos':usr.pontos})
 
 @app.route('/premios', methods=['GET'])
 @jwt_required()
 def listar_premios():
-    lst = Premio.query.all()
-    return jsonify([{'id':p.id,'nome':p.nome,'custo':p.custo} for p in lst])
+    return jsonify([{'id':p.id,'nome':p.nome,'custo':p.custo}
+                    for p in Premio.query.all()])
 
 @app.route('/resgatar', methods=['POST'])
 @jwt_required()
 def resgatar():
-    uid = get_jwt_identity()
-    dados = request.get_json()
-    premio = Premio.query.get(dados.get('premio_id'))
-    usr = Usuario.query.get(uid)
-    if not premio:
+    uid    = get_jwt_identity()
+    d      = request.get_json()
+    prem   = Premio.query.get(d.get('premio_id'))
+    usr    = Usuario.query.get(uid)
+    if not prem:
         return jsonify({'erro':'Prêmio não existe'}),404
-    if usr.pontos < premio.custo:
+    if usr.pontos < prem.custo:
         return jsonify({'erro':'Pontos insuficientes'}),400
-    usr.pontos -= premio.custo
+    usr.pontos -= prem.custo
     db.session.commit()
-    return jsonify({'message':'Resgate efetuado','pontos_restantes':usr.pontos})
+    return jsonify({
+        'message':'Resgate efetuado',
+        'pontos_restantes':usr.pontos
+    })
 
 if __name__=='__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', debug=True)
