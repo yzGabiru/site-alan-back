@@ -66,7 +66,7 @@ def registrar():
         nome   = d['nome'],
         email  = d['email'],
         senha  = generate_password_hash(d['senha']),
-        pontos = 100
+        pontos = 1000
     )
     db.session.add(u)
     db.session.commit()
