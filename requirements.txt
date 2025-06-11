@@ -4,3 +4,4 @@ Flask-CORS
 Flask-JWT-Extended
 Werkzeug
 gunicorn
+psycopg2-binary>=2.9.5
