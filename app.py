@@ -8,6 +8,7 @@ from flask_jwt_extended import (
     jwt_required, get_jwt_identity
 )
 from datetime import datetime
+
 app = Flask(__name__)
 
 # 1) DATABASE: usa o ENV DATABASE_URL ou cai na sua string Postgres
@@ -40,16 +41,14 @@ class Premio(db.Model):
     nome  = db.Column(db.String(80), nullable=False)
     custo = db.Column(db.Integer, nullable=False)
 
-
 class Resgate(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
+    id         = db.Column(db.Integer, primary_key=True)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
-    premio_id = db.Column(db.Integer, db.ForeignKey('premio.id'), nullable=False)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    premio_id  = db.Column(db.Integer, db.ForeignKey('premio.id'), nullable=False)
+    timestamp  = db.Column(db.DateTime, default=datetime.utcnow)
 
     usuario = db.relationship('Usuario', backref='resgates')
     premio  = db.relationship('Premio')
-
 
 # Rotas
 @app.route('/')
@@ -79,13 +78,14 @@ def login():
     usr = Usuario.query.filter_by(email=d.get('email')).first()
     if not usr or not check_password_hash(usr.senha, d.get('senha','')):
         return jsonify({'erro':'Credenciais inválidas'}),401
-    token = create_access_token(identity=usr.id)
+    # identidade como string para o JWT
+    token = create_access_token(identity=str(usr.id))
     return jsonify({'access_token':token}),200
 
 @app.route('/usuario/pontos', methods=['GET'])
 @jwt_required()
 def meus_pontos():
-    uid = get_jwt_identity()
+    uid = int(get_jwt_identity())
     usr = Usuario.query.get(uid)
     return jsonify({'pontos':usr.pontos})
 
@@ -98,7 +98,7 @@ def listar_premios():
 @app.route('/resgatar', methods=['POST'])
 @jwt_required()
 def resgatar():
-    uid = get_jwt_identity()
+    uid = int(get_jwt_identity())
     d = request.get_json()
     prem = Premio.query.get(d.get('premio_id'))
     usr = Usuario.query.get(uid)
@@ -106,14 +106,10 @@ def resgatar():
         return jsonify({'erro':'Prêmio não existe'}),404
     if usr.pontos < prem.custo:
         return jsonify({'erro':'Pontos insuficientes'}),400
-
-    # debita pontos
     usr.pontos -= prem.custo
-    # registra histórico
     r = Resgate(usuario_id=uid, premio_id=prem.id)
     db.session.add(r)
     db.session.commit()
-
     return jsonify({
         'message':'Resgate efetuado',
         'pontos_restantes':usr.pontos
@@ -122,14 +118,15 @@ def resgatar():
 @app.route('/usuario/historico', methods=['GET'])
 @jwt_required()
 def historico():
-    uid = get_jwt_identity()
-    resgates = Resgate.query.filter_by(usuario_id=uid).order_by(Resgate.timestamp.desc()).all()
+    uid = int(get_jwt_identity())
+    resgates = Resgate.query.filter_by(usuario_id=uid)\
+                           .order_by(Resgate.timestamp.desc()).all()
     result = []
     for r in resgates:
         result.append({
-            'id': r.id,
+            'id':   r.id,
             'nome': r.premio.nome,
-            'custo': r.premio.custo,
+            'custo':r.premio.custo,
             'data': r.timestamp.isoformat()
         })
     return jsonify(result),200
@@ -137,12 +134,12 @@ def historico():
 @app.route('/usuario/perfil', methods=['GET'])
 @jwt_required()
 def perfil():
-    uid = get_jwt_identity()
+    uid = int(get_jwt_identity())
     usr = Usuario.query.get(uid)
     return jsonify({
         'nome': usr.nome,
         'pontos': usr.pontos
-    }), 200
+    }),200
 
 if __name__=='__main__':
     app.run(host='0.0.0.0', debug=True)
