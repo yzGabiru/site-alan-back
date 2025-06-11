@@ -1,12 +1,8 @@
-from app import app, db, Premio
-
+from app import app, db, Premio, Resgate
 with app.app_context():
-    # DESTRÓI todas as tabelas
     db.drop_all()
-    # CRIA novamente as tabelas já com o campo pontos
     db.create_all()
-
-    # Popula prêmios iniciais (se quiser)
+    # prêmios iniciais
     if Premio.query.count() == 0:
         prêmios = [
             Premio(nome='Cesta Básica',   custo=80),
